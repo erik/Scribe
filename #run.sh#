@@ -1,1 +1,0 @@
-java -cp lib/*:src/:/usr/share/java/jogl.jar clojure.main src/scribe/run.clj
