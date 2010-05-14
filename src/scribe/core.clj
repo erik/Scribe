@@ -2,10 +2,9 @@
   (:import (java.awt Frame Dimension Graphics Graphics2D BasicStroke RenderingHints Color)
 	   (javax.swing JFrame JPanel)
 	   (javax.swing.event MouseInputAdapter)
-	   (java.awt.event  MouseEvent MouseListener KeyListener KeyEvent)))
+	   (java.awt.event MouseEvent MouseListener KeyListener KeyEvent)))
 
-;;TODO: ADD COMMAND ABILITIES!
-;;TODO: REMOVE RESIDUE (CLEAN LAST POINT)
+;;TODO: FRAME LOSES FOCUS FROM DAMN JOPTIONPANE! FIX THIS UGLY!
 
 
 (defstruct Point :x :y)
@@ -13,6 +12,7 @@
 
 (def last-point (ref nil))
 (def last-line (ref nil))
+(def last-string (ref nil))
 
 (def repaint? (ref false))
 
@@ -26,17 +26,28 @@
 	  ex (:x (line :e))
 	  ey (:y (line :e))]
       (doto g
-	(.setStroke (new BasicStroke 5.0))
+	(.setStroke (new BasicStroke 5.0)) ;;TODO: ADD VARIABLE SIZE POSIBILITY
 	(.setRenderingHint RenderingHints/KEY_ANTIALIASING
 			    RenderingHints/VALUE_ANTIALIAS_ON)
 	(.drawLine bx by ex ey)))))
 
+(defn draw-string [#^Graphics g]
+  (.drawString g @last-string (@last-point :x) (@last-point :y)))
+
+  
 (def canvas (proxy [JPanel] []
 		   (paintComponent [#^Graphics g]
-				   (when @repaint? (do
-						     (proxy-super paintComponent g)
-						     (set-repaint? false)))
-				   (draw-line g @last-line))))
+				   (draw-line g @last-line)
+				   (if @repaint?
+				     (do
+				       (proxy-super paintComponent g)
+				       (set-repaint? false)
+				       (dosync (ref-set last-line nil))))
+				     
+				   (if-not (nil? @last-string)
+				     (do
+				       (draw-string g)
+				       (dosync (ref-set last-string nil)))))))
 
 (defn repaint []
   (.repaint canvas))
@@ -49,7 +60,7 @@
 		      (let [ex (.getX e)
 			    ey (.getY e)]
 			(ref-set last-point (struct Point ex ey))))
-		     (.repaint canvas))
+		     (repaint))
        
        (mouseDragged [#^MouseEvent e]
 		     (if (not (nil? @last-point))
@@ -66,24 +77,26 @@
 
 (def key-handle
      (proxy [KeyListener] []
-       (keyTyped [#^KeyEvent e]
-		 (let [key (.getKeyChar e)]
-		   (condp = key
-		     \space (do
-			      (set-repaint? true)
-			      (repaint)))))
-       (keyPressed [#^KeyEvent e])
+       (keyTyped [#^KeyEvent e])
+       (keyPressed [#^KeyEvent e]
+		   (let [key (.getKeyCode e)]
+		     (cond
+		      (= key KeyEvent/VK_SPACE) (set-repaint? true)
+		      (= key KeyEvent/VK_S) (dosync (ref-set last-string (javax.swing.JOptionPane/showInputDialog "What's your message?"))))
+		     (repaint)))
        (keyReleased [#^KeyEvent e])))
 
 (defn scribe-window []
   (let [frame (new JFrame "Scribe")]
-    (.addMouseMotionListener canvas mouse-handle)
-    (.addMouseListener canvas mouse-handle)
-    (.addKeyListener frame key-handle)
-    (.setDefaultCloseOperation frame JFrame/DISPOSE_ON_CLOSE)
-    (. canvas (setPreferredSize (new Dimension 800 600)))
+    (doto canvas
+      (.addMouseMotionListener  mouse-handle)
+      (.addMouseListener mouse-handle)
+      (.setPreferredSize (new Dimension 800 600)))
     (.. frame (getContentPane) (add canvas))
     (doto frame
       (.setSize 800 600)
+      (.addKeyListener key-handle)
+      (.setDefaultCloseOperation JFrame/DISPOSE_ON_CLOSE)
       (.pack)
-      (.setVisible true))))
+      (.setVisible true)
+      (.setResizable false))))
