@@ -2,9 +2,10 @@
   (:import (java.awt Frame Dimension Graphics Graphics2D BasicStroke RenderingHints Color)
 	   (javax.swing JFrame JPanel)
 	   (javax.swing.event MouseInputAdapter)
-	   (java.awt.event  MouseEvent MouseListener MouseAdapter MouseWheelListener MouseWheelEvent)))
+	   (java.awt.event  MouseEvent MouseListener KeyListener KeyEvent)))
 
-;;TODO: ALLOW FOR SCREEN CLEAR
+;;TODO: ADD COMMAND ABILITIES!
+;;TODO: REMOVE RESIDUE (CLEAN LAST POINT)
 
 
 (defstruct Point :x :y)
@@ -13,6 +14,10 @@
 (def last-point (ref nil))
 (def last-line (ref nil))
 
+(def repaint? (ref false))
+
+(defn set-repaint? [val]
+  (dosync (ref-set repaint? val)))
 
 (defn draw-line [#^Graphics2D g line]
   (if (not (nil? line))
@@ -28,7 +33,13 @@
 
 (def canvas (proxy [JPanel] []
 		   (paintComponent [#^Graphics g]
+				   (when @repaint? (do
+						     (proxy-super paintComponent g)
+						     (set-repaint? false)))
 				   (draw-line g @last-line))))
+
+(defn repaint []
+  (.repaint canvas))
 
 (def mouse-handle
      (proxy [MouseInputAdapter] []
@@ -49,15 +60,26 @@
 			 (dosync
 			  (ref-set last-point (struct Point ex ey))
 			  (ref-set last-line (struct Line (struct Point bx by) @last-point)))
-			 (.repaint canvas))))
+			 (repaint))))
        
        (mouseReleased [#^MouseEvent e])))
 
+(def key-handle
+     (proxy [KeyListener] []
+       (keyTyped [#^KeyEvent e]
+		 (let [key (.getKeyChar e)]
+		   (condp = key
+		     \space (do
+			      (set-repaint? true)
+			      (repaint)))))
+       (keyPressed [#^KeyEvent e])
+       (keyReleased [#^KeyEvent e])))
 
 (defn scribe-window []
   (let [frame (new JFrame "Scribe")]
     (.addMouseMotionListener canvas mouse-handle)
     (.addMouseListener canvas mouse-handle)
+    (.addKeyListener frame key-handle)
     (.setDefaultCloseOperation frame JFrame/DISPOSE_ON_CLOSE)
     (. canvas (setPreferredSize (new Dimension 800 600)))
     (.. frame (getContentPane) (add canvas))
