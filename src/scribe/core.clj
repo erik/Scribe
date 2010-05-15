@@ -5,19 +5,28 @@
 	   (java.awt.event MouseEvent MouseListener KeyListener KeyEvent)))
 
 ;;TODO: ADD OPTIONS, SAVE ABILITY
+;;TODO: SPLIT INTO RELEVANT SEPARATE FILES
+;;TODO: ADD VARIABLE PEN WIDTH
+;;TODO: ADD ERASER
 
+;;USE CLJ_CONFIG TO SAVE
 
 (defstruct Point :x :y)
 (defstruct Line :b :e)
 
+
+;;CHANGE TO A SINGLE REF
 (def last-point (ref nil))
 (def last-line (ref nil))
 (def last-string (ref nil))
-
 (def repaint? (ref false))
+(def eraser? (ref false))
 
 (defn set-repaint? [val]
   (dosync (ref-set repaint? val)))
+
+(defn set-eraser? [val]
+  (dosync (ref-set eraser? val)))
 
 (defn draw-line [#^Graphics2D g line]
   (if (not (nil? line))
@@ -26,7 +35,7 @@
 	  ex (:x (line :e))
 	  ey (:y (line :e))]
       (doto g
-	(.setStroke (new BasicStroke 5.0)) ;;TODO: ADD VARIABLE SIZE POSIBILITY
+	(.setStroke (new BasicStroke 5.0)) 
 	(.setRenderingHint RenderingHints/KEY_ANTIALIASING
 			    RenderingHints/VALUE_ANTIALIAS_ON)
 	(.drawLine bx by ex ey)))))
@@ -34,18 +43,30 @@
 (defn draw-string [#^Graphics g]
   (.drawString g @last-string (@last-point :x) (@last-point :y)))
 
+(defn erase [#^Graphics g]
+  (doto g
+    (.setColor Color/WHITE)
+    (.fillRect (@last-point :x) (@last-point :y) 15 15)))
+
 (def frame (new JFrame "Scribe"))
 
 (def canvas (proxy [JPanel] []
 		   (paintComponent [#^Graphics g]
-				   (draw-line g @last-line)
+				   (if @eraser?
+				     (do
+				       (erase g))
+				     (draw-line g @last-line))
+				   
 				   (if @repaint?
 				     (do
 				       (proxy-super paintComponent g)
 				       (set-repaint? false)
 				       (dosync (ref-set last-line nil))))
-				     
-				   (if-not (nil? @last-string)
+				   
+				   (if (and
+					(not (nil? @last-point))
+					(not (nil? @last-string)))
+					    
 				     (do
 				       (draw-string g)
 				       (dosync (ref-set last-string nil)))))))
@@ -84,6 +105,9 @@
 		   (let [key (.getKeyCode e)]
 		     (cond
 		      (= key KeyEvent/VK_SPACE) (set-repaint? true)
+		      (= key KeyEvent/VK_E) (set-eraser? true)
+		      (= key KeyEvent/VK_W) (set-eraser? false)
+		      (= key KeyEvent/VK_ESCAPE) (System/exit 0)
 		      (= key KeyEvent/VK_S) (dosync
 					     (ref-set last-string  (dialog))
 					     (.requestFocus frame)))
@@ -91,17 +115,18 @@
        (keyReleased [#^KeyEvent e])))
 
 (defn scribe-window []
-  ;(let [frame (new JFrame "Scribe")]
-    (doto canvas
-      (.setPreferredSize (new Dimension 800 600))
-      (.addMouseMotionListener  mouse-handle)
-      (.addMouseListener mouse-handle))
-    (doto frame
-      (.setSize 800 600)
-      (.add canvas)
-      (.addKeyListener key-handle)
-      (.setDefaultCloseOperation JFrame/DISPOSE_ON_CLOSE)
-      (.setResizable false)
-      (.pack)
-      (.setVisible true)
-      (.setResizable false)));)
+  (doto canvas
+    (.setBackground Color/WHITE)
+    (.setPreferredSize (new Dimension 800 600))
+    (.addMouseMotionListener  mouse-handle)
+    (.addMouseListener mouse-handle))
+  (doto frame
+    (.setBackground Color/WHITE)
+    (.setSize 800 600)
+    (.add canvas)
+    (.addKeyListener key-handle)
+    (.setDefaultCloseOperation JFrame/DISPOSE_ON_CLOSE)
+    (.setResizable false)
+    (.pack)
+    (.setVisible true)
+    (.setResizable false)))

@@ -1,4 +1,4 @@
-(defproject scribe "0.1.1"
+(defproject scribe "0.1.2"
   :description "A whiteboard written in Clojure"
   :dependencies [[org.clojure/clojure "1.2.0-master-SNAPSHOT"]
                  [org.clojure/clojure-contrib "1.2.0-SNAPSHOT"]
