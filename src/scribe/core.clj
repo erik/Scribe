@@ -4,7 +4,7 @@
 	   (javax.swing.event MouseInputAdapter)
 	   (java.awt.event MouseEvent MouseListener KeyListener KeyEvent)))
 
-;;TODO: FRAME LOSES FOCUS FROM DAMN JOPTIONPANE! FIX THIS UGLY!
+;;TODO: ADD OPTIONS, SAVE ABILITY
 
 
 (defstruct Point :x :y)
@@ -34,7 +34,8 @@
 (defn draw-string [#^Graphics g]
   (.drawString g @last-string (@last-point :x) (@last-point :y)))
 
-  
+(def frame (new JFrame "Scribe"))
+
 (def canvas (proxy [JPanel] []
 		   (paintComponent [#^Graphics g]
 				   (draw-line g @last-line)
@@ -74,7 +75,8 @@
 			 (repaint))))
        
        (mouseReleased [#^MouseEvent e])))
-
+(defn- dialog []
+  (javax.swing.JOptionPane/showInputDialog "What's your message?"))
 (def key-handle
      (proxy [KeyListener] []
        (keyTyped [#^KeyEvent e])
@@ -82,21 +84,24 @@
 		   (let [key (.getKeyCode e)]
 		     (cond
 		      (= key KeyEvent/VK_SPACE) (set-repaint? true)
-		      (= key KeyEvent/VK_S) (dosync (ref-set last-string (javax.swing.JOptionPane/showInputDialog "What's your message?"))))
+		      (= key KeyEvent/VK_S) (dosync
+					     (ref-set last-string  (dialog))
+					     (.requestFocus frame)))
 		     (repaint)))
        (keyReleased [#^KeyEvent e])))
 
 (defn scribe-window []
-  (let [frame (new JFrame "Scribe")]
+  ;(let [frame (new JFrame "Scribe")]
     (doto canvas
+      (.setPreferredSize (new Dimension 800 600))
       (.addMouseMotionListener  mouse-handle)
-      (.addMouseListener mouse-handle)
-      (.setPreferredSize (new Dimension 800 600)))
-    (.. frame (getContentPane) (add canvas))
+      (.addMouseListener mouse-handle))
     (doto frame
       (.setSize 800 600)
+      (.add canvas)
       (.addKeyListener key-handle)
       (.setDefaultCloseOperation JFrame/DISPOSE_ON_CLOSE)
+      (.setResizable false)
       (.pack)
       (.setVisible true)
-      (.setResizable false))))
+      (.setResizable false)));)
