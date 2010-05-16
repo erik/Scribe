@@ -1,15 +1,16 @@
 (ns scribe.core
-  (:import (java.awt Frame Dimension Graphics Graphics2D BasicStroke RenderingHints Color)
-	   (javax.swing JFrame JPanel)
-	   (javax.swing.event MouseInputAdapter)
-	   (java.awt.event MouseEvent MouseListener KeyListener KeyEvent)))
+  (:import
+   (java.io File)
+   (java.awt Frame Dimension Graphics Graphics2D BasicStroke RenderingHints Color)
+   (javax.swing JFrame JPanel)
+   (javax.swing.event MouseInputAdapter)
+   (javax.imageio ImageIO)
+   (java.awt.event MouseEvent MouseListener KeyListener KeyEvent)
+   (java.awt.image BufferedImage)))
 
-;;TODO: ADD OPTIONS, SAVE ABILITY
+;;TODO: ADD OPTIONS
 ;;TODO: SPLIT INTO RELEVANT SEPARATE FILES
 ;;TODO: ADD VARIABLE PEN WIDTH
-;;TODO: ADD ERASER
-
-;;USE CLJ_CONFIG TO SAVE
 
 (defstruct Point :x :y)
 (defstruct Line :b :e)
@@ -20,8 +21,12 @@
 (def last-line (ref nil))
 (def last-string (ref nil))
 (def repaint? (ref false))
+(def screen-shot? (ref false))
 (def eraser? (ref false))
+(def save-dir (File. (str (System/getProperty "user.home") "/.scribe" )))
 
+(def screen (BufferedImage. 800 600 BufferedImage/TYPE_INT_RGB))
+ 
 (defn set-repaint? [val]
   (dosync (ref-set repaint? val)))
 
@@ -35,41 +40,54 @@
 	  ex (:x (line :e))
 	  ey (:y (line :e))]
       (doto g
+	(.setColor Color/BLACK)
 	(.setStroke (new BasicStroke 5.0)) 
 	(.setRenderingHint RenderingHints/KEY_ANTIALIASING
 			    RenderingHints/VALUE_ANTIALIAS_ON)
 	(.drawLine bx by ex ey)))))
 
 (defn draw-string [#^Graphics g]
+  (.setColor g Color/BLACK)
   (.drawString g @last-string (@last-point :x) (@last-point :y)))
 
 (defn erase [#^Graphics g]
-  (doto g
-    (.setColor Color/WHITE)
-    (.fillRect (@last-point :x) (@last-point :y) 15 15)))
-
+  (let [line @last-line]
+    (if (not (nil? line))
+      (let [bx (:x (line :b))
+	    by (:y (line :b))
+	    ex (:x (line :e))
+	    ey (:y (line :e))]
+	(doto g
+	  (.setColor Color/WHITE)
+	  (.setStroke (new BasicStroke 15.0)) 
+	  (.drawLine bx by ex ey))))))
+    
 (def frame (new JFrame "Scribe"))
 
 (def canvas (proxy [JPanel] []
 		   (paintComponent [#^Graphics g]
-				   (if @eraser?
-				     (do
-				       (erase g))
-				     (draw-line g @last-line))
-				   
-				   (if @repaint?
-				     (do
-				       (proxy-super paintComponent g)
-				       (set-repaint? false)
-				       (dosync (ref-set last-line nil))))
-				   
-				   (if (and
-					(not (nil? @last-point))
-					(not (nil? @last-string)))
-					    
-				     (do
-				       (draw-string g)
-				       (dosync (ref-set last-string nil)))))))
+				   (let [gr (.createGraphics screen)]
+				     (if @eraser?
+				       (do
+					 (erase gr))
+				       (draw-line gr @last-line))
+				     
+				     (if @repaint?
+				       (do
+					 (proxy-super paintComponent gr)
+					 (set-repaint? false)
+					 (dosync (ref-set last-line nil))))
+				     
+				     (if (and
+					  (not (nil? @last-point))
+					  (not (nil? @last-string)))
+				       
+				       (do
+					 (draw-string gr)
+					 (dosync (ref-set last-string nil))))
+				     (.drawImage g screen 0 0 nil)))))
+(defn save-image [name]
+  (ImageIO/write screen "png" (File. (str save-dir "/" name  ".png"))))
 
 (defn repaint []
   (.repaint canvas))
@@ -106,6 +124,7 @@
 		     (cond
 		      (= key KeyEvent/VK_SPACE) (set-repaint? true)
 		      (= key KeyEvent/VK_E) (set-eraser? true)
+		      (= key KeyEvent/VK_A) (save-image "screen")
 		      (= key KeyEvent/VK_W) (set-eraser? false)
 		      (= key KeyEvent/VK_ESCAPE) (System/exit 0)
 		      (= key KeyEvent/VK_S) (dosync
@@ -115,6 +134,7 @@
        (keyReleased [#^KeyEvent e])))
 
 (defn scribe-window []
+  (set-repaint? true)
   (doto canvas
     (.setBackground Color/WHITE)
     (.setPreferredSize (new Dimension 800 600))
