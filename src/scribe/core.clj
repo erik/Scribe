@@ -10,6 +10,7 @@
 
 ;;TODO: ADD OPTIONS
 ;;TODO: KEEP TRACK OF POINTS AND TEXT IN VECTOR. SAVE IN SPECIAL FORMAT.
+;;TODO: ADD TOOLBAR!
 ;;TODO: SPLIT INTO RELEVANT SEPARATE FILES
 ;;TODO: ADD VARIABLE PEN WIDTH
 
@@ -29,6 +30,7 @@
 		:pen-size 5.0
 		:pen-color Color/BLACK
 		:background-color Color/WHITE}))
+
  
 (defn set-repaint? [val]
   (dosync (alter data assoc :repaint? val)))
@@ -109,6 +111,25 @@
 (defn repaint []
   (.repaint canvas))
 
+(defn update-background [#^Color color]
+  (.setBackground canvas color))
+  
+(defn reset [] ;;complete reset of options
+  (dosync (alter data assoc
+		 :last-point nil
+		 :last-line nil
+		 :last-string nil
+		 :repaint? false
+		 :screen-shot? false
+		 :eraser? false
+		 :eraser-size 15.0
+		 :pen-size 5.0
+		 :pen-color Color/BLACK
+		 :background-color Color/WHITE))
+  (update-background (:background-color @data))
+  (set-repaint? true)
+  (repaint))
+
 (def menu-listener (proxy [ActionListener] []
 		     (actionPerformed [#^ActionEvent e]
 				      (let [source (.toLowerCase (.getText (.getSource e)))]
@@ -157,10 +178,11 @@
        (keyPressed [#^KeyEvent e]
 		   (let [key (.getKeyCode e)]
 		     (cond
-		      (= key KeyEvent/VK_SPACE) (set-repaint? true)
+		      (= key KeyEvent/VK_SPACE) (reset)
 		      (= key KeyEvent/VK_E) (set-eraser? true)
-		      (= key KeyEvent/VK_A) (save-dialog);(save-image "screen")
+		      (= key KeyEvent/VK_A) (save-dialog)
 		      (= key KeyEvent/VK_P) (pick-color :pen-color)
+		      (= key KeyEvent/VK_Q) (do (pick-color :background-color) (update-background (:background-color @data)))
 		      (= key KeyEvent/VK_W) (set-eraser? false)
 		      (= key KeyEvent/VK_ESCAPE) (System/exit 0)
 		      (= key KeyEvent/VK_S) (dosync
