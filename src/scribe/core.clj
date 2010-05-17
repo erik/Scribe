@@ -2,14 +2,14 @@
   (:import
    (java.io File)
    (java.awt Frame Dimension Graphics Graphics2D BasicStroke RenderingHints Color)
-   (javax.swing JFrame JPanel JColorChooser JOptionPane JMenuBar JMenuItem JMenu)
+   (javax.swing JFrame JPanel JColorChooser JFileChooser JOptionPane JMenuBar JMenuItem JMenu UIManager)
    (javax.swing.event MouseInputAdapter)
    (javax.imageio ImageIO)
    (java.awt.event MouseEvent MouseListener KeyListener ActionListener ActionEvent KeyEvent)
    (java.awt.image BufferedImage)))
 
 ;;TODO: ADD OPTIONS
-;;TODO: ADD TOOLBAR, GUI ELEMENTS
+;;TODO: KEEP TRACK OF POINTS AND TEXT IN VECTOR. SAVE IN SPECIAL FORMAT.
 ;;TODO: SPLIT INTO RELEVANT SEPARATE FILES
 ;;TODO: ADD VARIABLE PEN WIDTH
 
@@ -40,8 +40,16 @@
   (if-let [color (JColorChooser/showDialog nil "Choose a Color" Color/WHITE)]
     (dosync (alter data assoc key color))))
 
+(defn save-image [save-file]
+  (ImageIO/write screen "png"  save-file))
+
 (defn dialog [message]
   (JOptionPane/showInputDialog message))
+
+(defn save-dialog []
+  (let [fc (JFileChooser.)]
+    (if (= JFileChooser/APPROVE_OPTION (.showSaveDialog fc nil))
+      (save-image (.getSelectedFile fc)))))
 
 (defn draw-line [#^Graphics2D g line]
   (if (not (nil? line))
@@ -98,29 +106,27 @@
 					 (dosync (alter data assoc :last-string nil))))
 				     (.drawImage g screen 0 0 nil)))))
 
-(def menu-listener (proxy [ActionListener] []
-		     (actionPerformed [#^ActionEvent e]
-				      (let [source (.getText (.getSource e))](println source)))))
-
-(def menu-bar (doto (JMenuBar.)
-		;;BOILERPLATE FTL :(
-		;;MAKE A CREATE-MENUITEM FUNC WHICH DOES THIS FOR YOU!
-		(.add (doto (JMenu. "File")
-			(.add (doto (JMenuItem. "Save")
-				(.addActionListener menu-listener)))
-			(.add (doto (JMenuItem. "New")
-				(.addActionListener menu-listener)))
-			(.add (doto (JMenuItem. "Export")
-				(.addActionListener menu-listener)))
-			(.add (doto (JMenuItem. "Load")
-				(.addActionListener menu-listener)))))
-		(.add (doto (JMenu. "Edit")))))
-     
-(defn save-image [name]
-  (ImageIO/write screen "png" (File. (str save-dir "/" name  ".png"))))
-
 (defn repaint []
   (.repaint canvas))
+
+(def menu-listener (proxy [ActionListener] []
+		     (actionPerformed [#^ActionEvent e]
+				      (let [source (.toLowerCase (.getText (.getSource e)))]
+					(condp = source
+					  "export" (save-dialog)
+					  "new" (do (set-repaint? true) (repaint)))))))
+
+(defn- create-item [name]
+  (doto (JMenuItem. name)
+    (.addActionListener menu-listener)))
+
+(def menu-bar (doto (JMenuBar.)
+		(.add (doto (JMenu. "File")
+			(.add (create-item "Save"))
+			(.add (create-item "New"))
+			(.add (create-item "Export"))
+			(.add (create-item "Load"))))
+		(.add (doto (JMenu. "Edit")))))
 
 (def mouse-handle
      (proxy [MouseInputAdapter] []
@@ -153,7 +159,7 @@
 		     (cond
 		      (= key KeyEvent/VK_SPACE) (set-repaint? true)
 		      (= key KeyEvent/VK_E) (set-eraser? true)
-		      (= key KeyEvent/VK_A) (save-image "screen")
+		      (= key KeyEvent/VK_A) (save-dialog);(save-image "screen")
 		      (= key KeyEvent/VK_P) (pick-color :pen-color)
 		      (= key KeyEvent/VK_W) (set-eraser? false)
 		      (= key KeyEvent/VK_ESCAPE) (System/exit 0)
