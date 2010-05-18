@@ -45,6 +45,21 @@
 	ex (:x (line :e))
 	ey (:y (line :e))]
     (dosync (alter save-data assoc-in [:points rgb] (into (vec ((:points @save-data) rgb)) [[[bx by] [ex ey]]])))))
+
+(defn repaint-points [#^Graphics g data]
+ ; (.setBackground canvas (:background data)) ;DO THIS
+  (.setStroke g (BasicStroke. 5.0))
+  (.setRenderingHint g RenderingHints/KEY_ANTIALIASING
+		     RenderingHints/VALUE_ANTIALIAS_ON)
+  (let [points (reverse(:points data))] ;; reversed so layers are in correct order (LIFO -> FIFO)
+    (doseq [[color coord] points]
+      (.setColor g (Color. color))
+      (loop [[f & r] coord]
+	(let [[begin end] f]
+	  (let [[bx by] begin
+		[ex ey] end]
+	    (.drawLine g bx by ex ey)))
+	(when (not-empty r) (recur r))))))
  
 (defn set-repaint? [val]
   (dosync (alter data assoc :repaint? val)))
@@ -141,8 +156,8 @@
 		 :eraser-size 15.0
 		 :pen-size 5.0
 		 :pen-color Color/BLACK
-		 :background-color Color/WHITE)
-	  (alter save-data assoc :points {}))
+		 :background-color Color/WHITE))
+;	  (alter save-data assoc :points {})) ;;REMOVE THIS ONCE TESTING IS DONE
   (update-background (:background-color @data))
   (set-repaint? true)
   (repaint))
@@ -197,7 +212,7 @@
 		     (cond
 		      (= key KeyEvent/VK_SPACE) (reset)
 		      (= key KeyEvent/VK_E) (set-eraser? true)
-		      (= key KeyEvent/VK_K) (println (str "KEYS:" (keys @save-data) "VALS:" (vals @save-data)))
+		      (= key KeyEvent/VK_K) (repaint-points (.createGraphics screen) @save-data)
 		      (= key KeyEvent/VK_A) (save-dialog)
 		      (= key KeyEvent/VK_P) (pick-color :pen-color)
 		      (= key KeyEvent/VK_Q) (do (pick-color :background-color) (update-background (:background-color @data)))
