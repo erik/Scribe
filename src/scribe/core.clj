@@ -9,6 +9,7 @@
    (java.awt.image BufferedImage)))
 
 ;;TODO: ADD OPTIONS
+;;TODO: ADD HANDLING FOR TEXT
 ;;TODO: KEEP TRACK OF POINTS AND TEXT IN VECTOR. SAVE IN SPECIAL FORMAT.
 ;;TODO: ADD TOOLBAR!
 ;;TODO: SPLIT INTO RELEVANT SEPARATE FILES
@@ -31,6 +32,18 @@
 		:pen-color Color/BLACK
 		:background-color Color/WHITE}))
 
+(def save-data (ref {:background (.getRGB Color/WHITE)
+		     :points {};<COLOR> [coords] ;;COLOR IS RGB FORMAT. COORDS IS [[[0 1] [0 2]] [[12 1] [43 1]]... ]
+		     :text []; => [{:color ** :font ** :text **} {:color ** :font ** :text **} ...]
+		     }))
+
+(defn add-coord [#^Color color line]
+  (let [rgb (.getRGB color)
+	bx (:x (line :b))
+	by (:y (line :b))
+	ex (:x (line :e))
+	ey (:y (line :e))]
+    (dosync (alter save-data assoc-in [:points rgb] (into (vec ((:points @save-data) rgb)) [[[bx by] [ex ey]]])))))
  
 (defn set-repaint? [val]
   (dosync (alter data assoc :repaint? val)))
@@ -58,9 +71,11 @@
     (let [bx (:x (line :b))
 	  by (:y (line :b))
 	  ex (:x (line :e))
-	  ey (:y (line :e))]
+	  ey (:y (line :e))
+	  color (:pen-color @data)]
+      (add-coord color line)
       (doto g
-	(.setColor (:pen-color @data))
+	(.setColor color)
 	(.setStroke (new BasicStroke 5.0)) 
 	(.setRenderingHint RenderingHints/KEY_ANTIALIASING
 			    RenderingHints/VALUE_ANTIALIAS_ON)
@@ -86,7 +101,7 @@
     
 (def frame (new JFrame "Scribe"))
 
-(def canvas (proxy [JPanel] []
+(def canvas (proxy [JPanel] [false ]
 		   (paintComponent [#^Graphics g]
 				   (let [gr (.createGraphics screen)]
 				     (if (:eraser? @data)
@@ -125,7 +140,8 @@
 		 :eraser-size 15.0
 		 :pen-size 5.0
 		 :pen-color Color/BLACK
-		 :background-color Color/WHITE))
+		 :background-color Color/WHITE)
+	  (alter save-data assoc :points {}))
   (update-background (:background-color @data))
   (set-repaint? true)
   (repaint))
@@ -180,6 +196,7 @@
 		     (cond
 		      (= key KeyEvent/VK_SPACE) (reset)
 		      (= key KeyEvent/VK_E) (set-eraser? true)
+		      (= key KeyEvent/VK_K) (println (str "KEYS:" (keys @save-data) "VALS:" (vals @save-data)))
 		      (= key KeyEvent/VK_A) (save-dialog)
 		      (= key KeyEvent/VK_P) (pick-color :pen-color)
 		      (= key KeyEvent/VK_Q) (do (pick-color :background-color) (update-background (:background-color @data)))
