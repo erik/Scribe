@@ -1,16 +1,19 @@
 (ns scribe.core
+  (:use clj-config.core
+	[clojure.contrib.io :only [spit slurp*]])
   (:import
    (java.io File)
    (java.awt Frame Dimension Graphics Graphics2D BasicStroke RenderingHints Color)
-   (javax.swing JFrame JPanel JColorChooser JFileChooser JOptionPane JMenuBar JMenuItem JMenu UIManager)
+   (javax.swing JFrame JPanel JColorChooser JFileChooser JOptionPane JMenuBar JMenuItem JMenu UIManager KeyStroke)
    (javax.swing.event MouseInputAdapter)
    (javax.imageio ImageIO)
    (java.awt.event MouseEvent MouseListener KeyListener ActionListener ActionEvent KeyEvent)
    (java.awt.image BufferedImage)))
 
+;;TODO: THERE BE FAIL WHEN WITH LOAD AND SAVE
+;;TODO: ADD ERASER LINES INTO SAVE-DATA REF
 ;;TODO: ADD OPTIONS
 ;;TODO: ADD HANDLING FOR TEXT
-;;TODO: KEEP TRACK OF POINTS AND TEXT IN VECTOR. SAVE IN SPECIAL FORMAT.
 ;;TODO: ADD TOOLBAR!
 ;;TODO: SPLIT INTO RELEVANT SEPARATE FILES
 ;;TODO: ADD VARIABLE PEN WIDTH
@@ -72,7 +75,7 @@
     (dosync (alter data assoc key color))))
 
 (defn save-image [save-file]
-  (ImageIO/write screen "png"  save-file))
+  (when save-file (ImageIO/write screen "png"  save-file)))
 
 (defn dialog [message]
   (JOptionPane/showInputDialog message))
@@ -80,7 +83,12 @@
 (defn save-dialog []
   (let [fc (JFileChooser.)]
     (if (= JFileChooser/APPROVE_OPTION (.showSaveDialog fc nil))
-      (save-image (.getSelectedFile fc)))))
+       (.getSelectedFile fc))))
+
+(defn load-dialog []
+  (let [fc (JFileChooser.)]
+    (if (= JFileChooser/APPROVE_OPTION (.showOpenDialog fc nil))
+      (.getSelectedFile fc))))
 
 (defn draw-line [#^Graphics2D g line]
   (if (not (nil? line))
@@ -117,7 +125,7 @@
     
 (def frame (new JFrame "Scribe"))
 
-(def canvas (proxy [JPanel] [false ]
+(def canvas (proxy [JPanel] [true]
 		   (paintComponent [#^Graphics g]
 				   (let [gr (.createGraphics screen)]
 				     (if (:eraser? @data)
@@ -156,8 +164,8 @@
 		 :eraser-size 15.0
 		 :pen-size 5.0
 		 :pen-color Color/BLACK
-		 :background-color Color/WHITE))
-;	  (alter save-data assoc :points {})) ;;REMOVE THIS ONCE TESTING IS DONE
+		 :background-color Color/WHITE)
+	  (alter save-data assoc :points {})) 
   (update-background (:background-color @data))
   (set-repaint? true)
   (repaint))
@@ -166,19 +174,42 @@
 		     (actionPerformed [#^ActionEvent e]
 				      (let [source (.toLowerCase (.getText (.getSource e)))]
 					(condp = source
-					  "export" (save-dialog)
+					  "export as png" (save-image (save-dialog))
+					  "save" (if-let [file (save-dialog)]
+						   (spit file  (str @save-data)))
+					  "load" (if-let [file (load-dialog)]
+						   (do
+						     (dosync
+						      (set-repaint? true)
+						      (repaint)
+						      (ref-set save-data (read-string (slurp* (.toString file)))))
+						     (repaint-points (.createGraphics screen) @save-data)
+						     (repaint)))
 					  "new" (do (set-repaint? true) (repaint)))))))
+;;FORMAT FOR KEYSTROKES:
+;    <modifiers>* (<typedID> | <pressedReleasedID>)
+;
+;    modifiers := shift | control | ctrl | meta | alt | altGraph
+;    typedID := typed <typedKey>
+;    typedKey := string of length 1 giving Unicode character.
+;    pressedReleasedID := (pressed | released) key
+;    key := KeyEvent key code name, i.e. the name following "VK_".
 
-(defn- create-item [name]
-  (doto (JMenuItem. name)
-    (.addActionListener menu-listener)))
+
+(defn- create-item
+  ([name #^String key]
+     (doto (JMenuItem. name)
+       (.setAccelerator (KeyStroke/getKeyStroke key))
+       (.addActionListener menu-listener)))
+  ([name]
+     (create-item name "")))
 
 (def menu-bar (doto (JMenuBar.)
 		(.add (doto (JMenu. "File")
-			(.add (create-item "Save"))
-			(.add (create-item "New"))
-			(.add (create-item "Export"))
-			(.add (create-item "Load"))))
+			(.add (create-item "Save" "ctrl S"))
+			(.add (create-item "New" "ctrl N"))
+			(.add (create-item "Export as PNG" "ctrl E"))
+			(.add (create-item "Load" "ctrl O"))))
 		(.add (doto (JMenu. "Edit")))))
 
 (def mouse-handle
@@ -209,7 +240,7 @@
        (keyTyped [#^KeyEvent e])
        (keyPressed [#^KeyEvent e]
 		   (let [key (.getKeyCode e)]
-		     (cond
+		     (comment (cond
 		      (= key KeyEvent/VK_SPACE) (reset)
 		      (= key KeyEvent/VK_E) (set-eraser? true)
 		      (= key KeyEvent/VK_K) (repaint-points (.createGraphics screen) @save-data)
@@ -221,7 +252,7 @@
 		      (= key KeyEvent/VK_S) (dosync
 					     (alter data assoc :last-string  (dialog "Enter some text"))
 					     (.requestFocus frame)))
-		     (repaint)))
+		     (repaint))))
        (keyReleased [#^KeyEvent e])))
 
 (defn scribe-window []
