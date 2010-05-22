@@ -1,6 +1,5 @@
 (ns scribe.core
-  (:use clj-config.core
-	[clojure.contrib.io :only [spit slurp*]])
+  (:use [clojure.contrib.duck-streams :only [spit slurp*]])
   (:import
    (java.io File)
    (java.awt Frame Dimension Graphics Graphics2D BasicStroke RenderingHints Color)
@@ -10,13 +9,12 @@
    (java.awt.event MouseEvent MouseListener KeyListener ActionListener ActionEvent KeyEvent)
    (java.awt.image BufferedImage)))
 
-;;TODO: THERE BE FAIL WHEN WITH LOAD AND SAVE
+;;TODO: FIX UPDATE-BACKGROUND!
 ;;TODO: ADD ERASER LINES INTO SAVE-DATA REF
 ;;TODO: ADD OPTIONS
-;;TODO: ADD HANDLING FOR TEXT
+;;TODO: ADD HANDLING FOR TEXT IN SAVE FILE
 ;;TODO: ADD TOOLBAR!
 ;;TODO: SPLIT INTO RELEVANT SEPARATE FILES
-;;TODO: ADD VARIABLE PEN WIDTH
 ;;TODO: THERE BE SOME RESIDUE WHEN COLOR IS CHANGED, OR SWITCHED TO ERASER
 
 (defstruct Point :x :y)
@@ -54,7 +52,7 @@
   (.setStroke g (BasicStroke. 5.0))
   (.setRenderingHint g RenderingHints/KEY_ANTIALIASING
 		     RenderingHints/VALUE_ANTIALIAS_ON)
-  (let [points (reverse(:points data))] ;; reversed so layers are in correct order (LIFO -> FIFO)
+  (let [points (reverse (:points data))] ;; reversed so layers are in correct order (LIFO -> FIFO)
     (doseq [[color coord] points]
       (.setColor g (Color. color))
       (loop [[f & r] coord]
@@ -80,15 +78,24 @@
 (defn dialog [message]
   (JOptionPane/showInputDialog message))
 
-(defn save-dialog []
-  (let [fc (JFileChooser.)]
-    (if (= JFileChooser/APPROVE_OPTION (.showSaveDialog fc nil))
-       (.getSelectedFile fc))))
+(defn message [message]
+  (JOptionPane/showMessageDialog nil message))
+  
+(defn save-dialog
+  ([parent]
+     (let [fc (JFileChooser.)]
+       (if (= JFileChooser/APPROVE_OPTION (.showSaveDialog fc parent))
+	 (.getSelectedFile fc))))
+  ([]
+     (save-dialog nil)))
 
-(defn load-dialog []
-  (let [fc (JFileChooser.)]
-    (if (= JFileChooser/APPROVE_OPTION (.showOpenDialog fc nil))
-      (.getSelectedFile fc))))
+(defn load-dialog
+  ([parent]
+     (let [fc (JFileChooser.)]
+       (if (= JFileChooser/APPROVE_OPTION (.showOpenDialog fc parent))
+	 (.getSelectedFile fc))))
+  ([]
+     (load-dialog nil)))
 
 (defn draw-line [#^Graphics2D g line]
   (if (not (nil? line))
@@ -151,7 +158,13 @@
   (.repaint canvas))
 
 (defn update-background [#^Color color]
-  (.setBackground canvas color))
+  (set-repaint? true)
+  (repaint)
+  (.setBackground canvas color)
+  (.requestFocus frame)
+  (repaint-points (.createGraphics screen) @save-data)
+  (repaint))
+
   
 (defn reset [] ;;complete reset of options
   (dosync (alter data assoc
@@ -165,27 +178,35 @@
 		 :pen-size 5.0
 		 :pen-color Color/BLACK
 		 :background-color Color/WHITE)
-	  (alter save-data assoc :points {})) 
+	  (ref-set save-data {:background nil :points {} :text []}))
   (update-background (:background-color @data))
   (set-repaint? true)
   (repaint))
 
+(defn read-file []
+  (reset)
+  (if-let [file (load-dialog frame)]
+    (do
+      (try
+       (let [content (read-string (slurp* file))]
+	 (when (not= (class content clojure.lang.PersistentArrayMap))
+	   (throw (Exception. "LOL, BOOM")))
+	 (dosync
+	  (ref-set save-data content)))
+       (repaint-points (.createGraphics screen) @save-data)
+       (repaint)
+       (catch Exception _
+	 (message "File is corrupt, or not a Scribe file"))))))
+  
 (def menu-listener (proxy [ActionListener] []
 		     (actionPerformed [#^ActionEvent e]
 				      (let [source (.toLowerCase (.getText (.getSource e)))]
 					(condp = source
-					  "export as png" (save-image (save-dialog))
-					  "save" (if-let [file (save-dialog)]
+					  "export as png" (save-image (save-dialog frame))
+					  "save" (if-let [file (save-dialog frame)]
 						   (spit file  (str @save-data)))
-					  "load" (if-let [file (load-dialog)]
-						   (do
-						     (dosync
-						      (set-repaint? true)
-						      (repaint)
-						      (ref-set save-data (read-string (slurp* (.toString file)))))
-						     (repaint-points (.createGraphics screen) @save-data)
-						     (repaint)))
-					  "new" (do (set-repaint? true) (repaint)))))))
+					  "load" (read-file) 
+					  "new" (reset))))))
 ;;FORMAT FOR KEYSTROKES:
 ;    <modifiers>* (<typedID> | <pressedReleasedID>)
 ;
@@ -240,19 +261,22 @@
        (keyTyped [#^KeyEvent e])
        (keyPressed [#^KeyEvent e]
 		   (let [key (.getKeyCode e)]
-		     (comment (cond
+		     (cond
 		      (= key KeyEvent/VK_SPACE) (reset)
 		      (= key KeyEvent/VK_E) (set-eraser? true)
 		      (= key KeyEvent/VK_K) (repaint-points (.createGraphics screen) @save-data)
-		      (= key KeyEvent/VK_A) (save-dialog)
 		      (= key KeyEvent/VK_P) (pick-color :pen-color)
-		      (= key KeyEvent/VK_Q) (do (pick-color :background-color) (update-background (:background-color @data)))
+		      (= key KeyEvent/VK_Q) (do
+					      (pick-color :background-color)
+					      (update-background (:background-color @data))
+					      (repaint)
+					      (repaint-points (.createGraphics screen) @save-data))
 		      (= key KeyEvent/VK_W) (set-eraser? false)
-		      (= key KeyEvent/VK_ESCAPE) (System/exit 0)
-		      (= key KeyEvent/VK_S) (dosync
-					     (alter data assoc :last-string  (dialog "Enter some text"))
-					     (.requestFocus frame)))
-		     (repaint))))
+		      (= key KeyEvent/VK_ESCAPE) (System/exit 0))
+	        ;     (= key KeyEvent/VK_S) (dosync
+		;			     (alter data assoc :last-string  (dialog "Enter some text"))
+		;			     (.requestFocus frame)))
+		     (repaint)))
        (keyReleased [#^KeyEvent e])))
 
 (defn scribe-window []
