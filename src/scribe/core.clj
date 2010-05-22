@@ -189,13 +189,13 @@
     (do
       (try
        (let [content (read-string (slurp* file))]
-	 (when (not= (class content clojure.lang.PersistentArrayMap))
+	 (when (not= (class content) clojure.lang.PersistentArrayMap)
 	   (throw (Exception. "LOL, BOOM")))
 	 (dosync
 	  (ref-set save-data content)))
        (repaint-points (.createGraphics screen) @save-data)
        (repaint)
-       (catch Exception _
+       (catch Exception e
 	 (message "File is corrupt, or not a Scribe file"))))))
   
 (def menu-listener (proxy [ActionListener] []
