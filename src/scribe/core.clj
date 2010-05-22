@@ -9,7 +9,6 @@
    (java.awt.event MouseEvent MouseListener KeyListener ActionListener ActionEvent KeyEvent)
    (java.awt.image BufferedImage)))
 
-;;TODO: FIX UPDATE-BACKGROUND!
 ;;TODO: ADD ERASER LINES INTO SAVE-DATA REF
 ;;TODO: ADD OPTIONS
 ;;TODO: ADD HANDLING FOR TEXT IN SAVE FILE
@@ -48,7 +47,6 @@
     (dosync (alter save-data assoc-in [:points rgb] (into (vec ((:points @save-data) rgb)) [[[bx by] [ex ey]]])))))
 
 (defn repaint-points [#^Graphics g data]
- ; (.setBackground canvas (:background data)) ;DO THIS
   (.setStroke g (BasicStroke. 5.0))
   (.setRenderingHint g RenderingHints/KEY_ANTIALIASING
 		     RenderingHints/VALUE_ANTIALIAS_ON)
@@ -143,6 +141,7 @@
 				     (if (:repaint? @data)
 				       (do
 					 (proxy-super paintComponent gr)
+					 (repaint-points gr @save-data)
 					 (set-repaint? false)
 					 (dosync (alter data assoc :last-line nil))))
 				     
@@ -158,11 +157,10 @@
   (.repaint canvas))
 
 (defn update-background [#^Color color]
+  (dosync (alter save-data assoc :background (.getRGB color)))
   (set-repaint? true)
-  (repaint)
   (.setBackground canvas color)
   (.requestFocus frame)
-  (repaint-points (.createGraphics screen) @save-data)
   (repaint))
 
   
@@ -192,10 +190,13 @@
 	 (when (not= (class content) clojure.lang.PersistentArrayMap)
 	   (throw (Exception. "LOL, BOOM")))
 	 (dosync
-	  (ref-set save-data content)))
+	  (ref-set save-data content)
+	  (alter data assoc :background-color (Color. (:background @save-data)))))
+       (update-background (:background-color @data))
        (repaint-points (.createGraphics screen) @save-data)
        (repaint)
        (catch Exception e
+	 (println e)
 	 (message "File is corrupt, or not a Scribe file"))))))
   
 (def menu-listener (proxy [ActionListener] []
@@ -268,11 +269,11 @@
 		      (= key KeyEvent/VK_P) (pick-color :pen-color)
 		      (= key KeyEvent/VK_Q) (do
 					      (pick-color :background-color)
-					      (update-background (:background-color @data))
-					      (repaint)
-					      (repaint-points (.createGraphics screen) @save-data))
+					      (update-background (:background-color @data)))
 		      (= key KeyEvent/VK_W) (set-eraser? false)
 		      (= key KeyEvent/VK_ESCAPE) (System/exit 0))
+
+		     ;;ADD THIS FUNCTIONALITY BACK IN!
 	        ;     (= key KeyEvent/VK_S) (dosync
 		;			     (alter data assoc :last-string  (dialog "Enter some text"))
 		;			     (.requestFocus frame)))
