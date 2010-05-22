@@ -187,7 +187,7 @@
     (do
       (try
        (let [content (read-string (slurp* file))]
-	 (when (not= (class content) clojure.lang.PersistentArrayMap)
+	 (when-not (map? content)
 	   (throw (Exception. "LOL, BOOM")))
 	 (dosync
 	  (ref-set save-data content)
