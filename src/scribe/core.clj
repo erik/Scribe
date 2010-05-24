@@ -2,16 +2,16 @@
   (:use [clojure.contrib.duck-streams :only [spit slurp*]])
   (:import
    (java.io File)
-   (java.awt Frame Dimension Graphics Graphics2D BasicStroke RenderingHints Color)
+   (java.awt Frame Dimension Graphics Graphics2D BasicStroke RenderingHints Color Font)
    (javax.swing JFrame JPanel JColorChooser JFileChooser JOptionPane JMenuBar JMenuItem JMenu UIManager KeyStroke)
    (javax.swing.event MouseInputAdapter)
    (javax.imageio ImageIO)
    (java.awt.event MouseEvent MouseListener KeyListener ActionListener ActionEvent KeyEvent)
    (java.awt.image BufferedImage)))
 
-;;TODO: ADD ERASER LINES INTO SAVE-DATA REF
-;;TODO: ADD OPTIONS
 ;;TODO: ADD HANDLING FOR TEXT IN SAVE FILE
+;;TODO: REPAINT-POINTS IS MINE FIELD OF BOILER PLATE
+;;TODO: ADD OPTIONS
 ;;TODO: ADD TOOLBAR!
 ;;TODO: SPLIT INTO RELEVANT SEPARATE FILES
 ;;TODO: THERE BE SOME RESIDUE WHEN COLOR IS CHANGED, OR SWITCHED TO ERASER
@@ -34,6 +34,7 @@
 		:background-color Color/WHITE}))
 
 (def save-data (ref {:background (.getRGB Color/WHITE)
+		     :eraser-points []
 		     :points {};<COLOR> [coords] ;;COLOR IS RGB FORMAT. COORDS IS [[[0 1] [0 2]] [[12 1] [43 1]]... ]
 		     :text []; => [{:color ** :font ** :text **} {:color ** :font ** :text **} ...]
 		     }))
@@ -46,7 +47,15 @@
 	ey (:y (line :e))]
     (dosync (alter save-data assoc-in [:points rgb] (into (vec ((:points @save-data) rgb)) [[[bx by] [ex ey]]])))))
 
+(defn add-eraser-coord [line]
+  (let [bx (:x (line :b))
+	by (:y (line :b))
+	ex (:x (line :e))
+	ey (:y (line :e))]
+    (dosync (alter save-data assoc :eraser-points (conj (:eraser-points @save-data) [[[bx by] [ex ey]]])))))
+
 (defn repaint-points [#^Graphics g data]
+  ;;LOTS O' BOILER PLATE HERE!
   (.setStroke g (BasicStroke. 5.0))
   (.setRenderingHint g RenderingHints/KEY_ANTIALIASING
 		     RenderingHints/VALUE_ANTIALIAS_ON)
@@ -58,13 +67,23 @@
 	  (let [[bx by] begin
 		[ex ey] end]
 	    (.drawLine g bx by ex ey)))
+	(when (not-empty r) (recur r)))))
+  (.setStroke g (BasicStroke. 15.0))
+  (let [color (:background @save-data)]
+    (.setColor g (Color. color))
+    (doseq [coord (:eraser-points @save-data)]
+      (loop [[f & r] coord]
+   	(let [[begin end] f]
+	  (let [[bx by] begin
+		[ex ey] end]
+	    (.drawLine g bx by ex ey)))
 	(when (not-empty r) (recur r))))))
- 
+       
 (defn set-repaint? [val]
   (dosync (alter data assoc :repaint? val)))
 
 (defn set-eraser? [val]
-  (dosync (alter data assoc :eraser? val)))
+  (dosync (alter data assoc :eraser? val :last-point nil :last-line nil)))
 
 (defn pick-color [key]
   (if-let [color (JColorChooser/showDialog nil "Choose a Color" Color/WHITE)]
@@ -95,23 +114,27 @@
   ([]
      (load-dialog nil)))
 
-(defn draw-line [#^Graphics2D g line]
-  (if (not (nil? line))
-    (let [bx (:x (line :b))
-	  by (:y (line :b))
-	  ex (:x (line :e))
-	  ey (:y (line :e))
-	  color (:pen-color @data)]
-      (add-coord color line)
-      (doto g
-	(.setColor color)
-	(.setStroke (new BasicStroke 5.0)) 
-	(.setRenderingHint RenderingHints/KEY_ANTIALIASING
-			    RenderingHints/VALUE_ANTIALIAS_ON)
-	(.drawLine bx by ex ey)))))
+(defn draw-line
+  ([#^Graphics2D g line line-size]
+     (if (not (nil? line))
+       (let [bx (:x (line :b))
+	     by (:y (line :b))
+	     ex (:x (line :e))
+	     ey (:y (line :e))
+	     color (:pen-color @data)]
+	 (add-coord color line)
+	 (doto g
+	   (.setColor color)
+	   (.setStroke (new BasicStroke line-size)) 
+	   (.setRenderingHint RenderingHints/KEY_ANTIALIASING
+			      RenderingHints/VALUE_ANTIALIAS_ON)
+	   (.drawLine bx by ex ey)))))
+  ([#^Graphics2D g line]
+     (draw-line g line 5.0)))
 
 (defn draw-string [#^Graphics g]
-  (.setColor g Color/BLACK)
+  (.setColor g Color/BLACK) ;;PEN-COLOR CHANGE
+  (.setFont g (Font. "sansserrif" Font/PLAIN 12)) ;;ALLOW SIZE CHANGE
   (.drawString g (:last-string @data) ((:last-point @data) :x) ((:last-point @data) :y)))
 
 (defn erase [#^Graphics g]
@@ -121,8 +144,9 @@
 	    by (:y (line :b))
 	    ex (:x (line :e))
 	    ey (:y (line :e))]
+	(add-eraser-coord line)
 	(doto g
-	  (.setColor Color/WHITE)
+	  (.setColor (:background-color @data))
 	  (.setStroke (new BasicStroke 15.0)) 
 	  (.drawLine bx by ex ey))))))
 
@@ -176,7 +200,11 @@
 		 :pen-size 5.0
 		 :pen-color Color/BLACK
 		 :background-color Color/WHITE)
-	  (ref-set save-data {:background nil :points {} :text []}))
+	  (alter save-data assoc
+		 :background nil		 
+		 :points {}
+		 :text []
+		 :eraser-points []))
   (update-background (:background-color @data))
   (set-repaint? true)
   (repaint))
@@ -271,12 +299,10 @@
 					      (pick-color :background-color)
 					      (update-background (:background-color @data)))
 		      (= key KeyEvent/VK_W) (set-eraser? false)
-		      (= key KeyEvent/VK_ESCAPE) (System/exit 0))
-
-		     ;;ADD THIS FUNCTIONALITY BACK IN!
-	        ;     (= key KeyEvent/VK_S) (dosync
-		;			     (alter data assoc :last-string  (dialog "Enter some text"))
-		;			     (.requestFocus frame)))
+		      (= key KeyEvent/VK_ESCAPE) (System/exit 0)
+		      (= key KeyEvent/VK_D) (dosync
+					     (alter data assoc :last-string  (dialog "Enter some text"))
+					     (.requestFocus frame)))
 		     (repaint)))
        (keyReleased [#^KeyEvent e])))
 
