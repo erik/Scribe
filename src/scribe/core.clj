@@ -36,7 +36,7 @@
 (def save-data (ref {:background (.getRGB Color/WHITE)
 		     :eraser-points []
 		     :points {};<COLOR> [coords] ;;COLOR IS RGB FORMAT. COORDS IS [[[0 1] [0 2]] [[12 1] [43 1]]... ]
-		     :text []; => [{:color ** :font ** :text **} {:color ** :font ** :text **} ...]
+		     :text []; => [{:color ** :size ** :text **} {:color ** :size ** :text **} ...]
 		     }))
 
 (defn add-coord [#^Color color line]
@@ -132,10 +132,17 @@
   ([#^Graphics2D g line]
      (draw-line g line 5.0)))
 
-(defn draw-string [#^Graphics g]
-  (.setColor g Color/BLACK) ;;PEN-COLOR CHANGE
-  (.setFont g (Font. "sansserrif" Font/PLAIN 12)) ;;ALLOW SIZE CHANGE
-  (.drawString g (:last-string @data) ((:last-point @data) :x) ((:last-point @data) :y)))
+(defn draw-string
+  ([#^Graphics g string x y]
+     (.setColor g Color/BLACK) ;;PEN-COLOR CHANGE
+     (.setFont g (Font. "sansserrif" Font/PLAIN 12)) ;;ALLOW SIZE CHANGE
+       (loop [[f & r] (.split string "\n|\r\n")
+	      y  y]
+	 (.drawString g f x y)
+	 (when-not (empty? r) (recur r (+ 12 y))))) ;; 12 NEEDS TO CHANGE!
+  ([#^Graphics g]
+     (draw-string g (:last-string @data) ((:last-point @data) :x) ((:last-point @data) :y))))
+  
 
 (defn erase [#^Graphics g]
   (let [line (:last-line @data)]
@@ -301,7 +308,7 @@
 		      (= key KeyEvent/VK_W) (set-eraser? false)
 		      (= key KeyEvent/VK_ESCAPE) (System/exit 0)
 		      (= key KeyEvent/VK_D) (dosync
-					     (alter data assoc :last-string  (dialog "Enter some text"))
+					     (alter data assoc :last-string "THIS\r\nARE\n\nMULTI\nLINE!\r\n") ; (dialog "Enter some text"))
 					     (.requestFocus frame)))
 		     (repaint)))
        (keyReleased [#^KeyEvent e])))
