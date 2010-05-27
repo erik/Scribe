@@ -9,12 +9,11 @@
    (java.awt.event MouseEvent MouseListener KeyListener ActionListener ActionEvent KeyEvent)
    (java.awt.image BufferedImage)))
 
-;;TODO: ADD HANDLING FOR TEXT IN SAVE FILE
+;;TODO: ODD BUG -- DRAW-STRING, LINE 47 -- SOMETIMES.
 ;;TODO: REPAINT-POINTS IS MINE FIELD OF BOILER PLATE
 ;;TODO: ADD OPTIONS
 ;;TODO: ADD TOOLBAR!
 ;;TODO: SPLIT INTO RELEVANT SEPARATE FILES
-;;TODO: THERE BE SOME RESIDUE WHEN COLOR IS CHANGED, OR SWITCHED TO ERASER
 
 (defstruct Point :x :y)
 (defstruct Line :b :e)
@@ -29,6 +28,7 @@
 		:screen-shot? false
 		:eraser? false
 		:eraser-size 15.0
+		:text-size 12
 		:pen-size 5.0
 		:pen-color Color/BLACK
 		:background-color Color/WHITE}))
@@ -38,6 +38,20 @@
 		     :points {};<COLOR> [coords] ;;COLOR IS RGB FORMAT. COORDS IS [[[0 1] [0 2]] [[12 1] [43 1]]... ]
 		     :text []; => [{:color ** :size ** :text **} {:color ** :size ** :text **} ...]
 		     }))
+(defn draw-string 
+  ([#^Graphics g {:keys [text x y color size]}]
+     (.setColor g (Color. color))
+     (.setFont g (Font. "sansserrif" Font/PLAIN size))
+       (loop [[f & r] (.split text  "\n|\r\n")
+	      y  y]
+	 (.drawString g f x y)
+	 (when (seq r) (recur r (+ y size)))))
+  ([#^Graphics g]
+     (draw-string g {:text (:last-string @data)
+		     :x ((:last-point @data) :x)
+		     :y ((:last-point @data) :y)
+		     :size 12
+		     :color (.getRGB (Color/BLACK))})))
 
 (defn add-coord [#^Color color line]
   (let [rgb (.getRGB color)
@@ -54,6 +68,9 @@
 	ey (:y (line :e))]
     (dosync (alter save-data assoc :eraser-points (conj (:eraser-points @save-data) [[[bx by] [ex ey]]])))))
 
+(defn add-string [{:keys [color size text x y]}]
+  (dosync (alter save-data assoc :text (conj (:text @save-data) {:color color :size size :text text :x x :y y}))))
+
 (defn repaint-points [#^Graphics g data]
   ;;LOTS O' BOILER PLATE HERE!
   (.setStroke g (BasicStroke. 5.0))
@@ -68,6 +85,16 @@
 		[ex ey] end]
 	    (.drawLine g bx by ex ey)))
 	(when (not-empty r) (recur r)))))
+
+  (doseq [map (:text @save-data)]
+    (println map)
+    (let [color (:color map)
+	  size (:size map)
+	  text (:text map)
+	  x (:x map)
+	  y (:y map)]
+      (draw-string g map)))
+	  
   (.setStroke g (BasicStroke. 15.0))
   (let [color (:background @save-data)]
     (.setColor g (Color. color))
@@ -131,18 +158,7 @@
 	   (.drawLine bx by ex ey)))))
   ([#^Graphics2D g line]
      (draw-line g line 5.0)))
-
-(defn draw-string
-  ([#^Graphics g string x y]
-     (.setColor g Color/BLACK) ;;PEN-COLOR CHANGE
-     (.setFont g (Font. "sansserrif" Font/PLAIN 12)) ;;ALLOW SIZE CHANGE
-       (loop [[f & r] (.split string "\n|\r\n")
-	      y  y]
-	 (.drawString g f x y)
-	 (when-not (empty? r) (recur r (+ 12 y))))) ;; 12 NEEDS TO CHANGE!
-  ([#^Graphics g]
-     (draw-string g (:last-string @data) ((:last-point @data) :x) ((:last-point @data) :y))))
-  
+ 
 
 (defn erase [#^Graphics g]
   (let [line (:last-line @data)]
@@ -175,13 +191,27 @@
 					 (repaint-points gr @save-data)
 					 (set-repaint? false)
 					 (dosync (alter data assoc :last-line nil))))
-				     
-				     (if (and
-					  (not (nil? (:last-point @data)))
-					  (not (nil? (:last-string @data))))				       
-				       (do
-					 (draw-string gr)
-					 (dosync (alter data assoc :last-string nil))))
+				     (let [last-point (:last-point @data)
+					   last-string (:last-string @data)
+					   color (:pen-color @data)
+					   size (:text-size @data)]
+
+				       (if (and
+					    (seq last-point)
+					    (seq last-string))
+					 (do
+					   (add-string {:color (.getRGB color)
+							:size size
+							:text last-string
+							:x (last-point :x)
+							:y (last-point :y)})
+
+					   (draw-string gr {:color (.getRGB color)
+							    :size 12
+							    :text (:last-string @data)
+							    :x (last-point :x)
+							    :y (last-point :y)})
+					   (dosync (alter data assoc :last-string nil)))))
 				     (.drawImage g screen 0 0 nil)))))
 
 (defn repaint []
@@ -205,6 +235,7 @@
 		 :eraser? false
 		 :eraser-size 15.0
 		 :pen-size 5.0
+		 :text-size 12.0
 		 :pen-color Color/BLACK
 		 :background-color Color/WHITE)
 	  (alter save-data assoc
@@ -308,7 +339,7 @@
 		      (= key KeyEvent/VK_W) (set-eraser? false)
 		      (= key KeyEvent/VK_ESCAPE) (System/exit 0)
 		      (= key KeyEvent/VK_D) (dosync
-					     (alter data assoc :last-string "THIS\r\nARE\n\nMULTI\nLINE!\r\n") ; (dialog "Enter some text"))
+					     (alter data assoc :last-string (dialog "Enter some text"))
 					     (.requestFocus frame)))
 		     (repaint)))
        (keyReleased [#^KeyEvent e])))
