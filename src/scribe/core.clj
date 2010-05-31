@@ -15,11 +15,13 @@
 ;;TODO: ADD TOOLBAR!
 ;;TODO: SPLIT INTO RELEVANT SEPARATE FILES
 
+(set! *warn-on-reflection* true)
+
 (defstruct Point :x :y)
 (defstruct Line :b :e)
 
 (def save-dir (File. (str (System/getProperty "user.home") "/.scribe" )))
-(def screen (BufferedImage. 800 600 BufferedImage/TYPE_INT_RGB))
+(def #^BufferedImage screen (BufferedImage. 800 600 BufferedImage/TYPE_INT_RGB))
 
 (def data (ref {:last-point nil
 		:last-line nil
@@ -39,14 +41,14 @@
 		     :text []; => [{:color ** :size ** :text **} {:color ** :size ** :text **} ...]
 		     }))
 (defn draw-string 
-  ([#^Graphics g {:keys [text x y color size]}]
+  ([#^Graphics2D g {:keys [#^String text #^Integer x #^Integer y color size]}]
      (.setColor g (Color. color))
      (.setFont g (Font. "sansserrif" Font/PLAIN size))
-       (loop [[f & r] (.split text  "\n|\r\n")
-	      y  y]
-	 (.drawString g f x y)
+       (loop [[#^String f & r] (.split text  "\n|\r\n")
+	      y y]
+	 (.drawString g #^String f x y)
 	 (when (seq r) (recur r (+ y size)))))
-  ([#^Graphics g]
+  ([#^Graphics2D g]
      (draw-string g {:text (:last-string @data)
 		     :x ((:last-point @data) :x)
 		     :y ((:last-point @data) :y)
@@ -71,7 +73,7 @@
 (defn add-string [{:keys [color size text x y]}]
   (dosync (alter save-data assoc :text (conj (:text @save-data) {:color color :size size :text text :x x :y y}))))
 
-(defn repaint-points [#^Graphics g data]
+(defn repaint-points [#^Graphics2D g data]
   ;;LOTS O' BOILER PLATE HERE!
   (.setStroke g (BasicStroke. 5.0))
   (.setRenderingHint g RenderingHints/KEY_ANTIALIASING
@@ -116,8 +118,8 @@
   (if-let [color (JColorChooser/showDialog nil "Choose a Color" Color/WHITE)]
     (dosync (alter data assoc key color))))
 
-(defn save-image [save-file]
-  (when save-file (ImageIO/write screen "png"  save-file)))
+(defn save-image [#^File save-file]
+  (when save-file (ImageIO/write #^BufferedImage screen "png"  save-file)))
 
 (defn dialog [message]
   (JOptionPane/showInputDialog message))
@@ -160,7 +162,7 @@
      (draw-line g line 5.0)))
  
 
-(defn erase [#^Graphics g]
+(defn erase [#^Graphics2D g]
   (let [line (:last-line @data)]
     (if (not (nil? line))
       (let [bx (:x (line :b))
@@ -169,8 +171,8 @@
 	    ey (:y (line :e))]
 	(add-eraser-coord line)
 	(doto g
-	  (.setColor (:background-color @data))
-	  (.setStroke (new BasicStroke 15.0)) 
+	  (.setColor #^Color (:background-color @data))
+	  (.setStroke (BasicStroke. 15.0)) 
 	  (.drawLine bx by ex ey))))))
 
 ;;GUI Components;;
@@ -179,7 +181,7 @@
 
 (def canvas (proxy [JPanel] [true]
 		   (paintComponent [#^Graphics g]
-				   (let [gr (.createGraphics screen)]
+				   (let [#^Graphics2D gr (.createGraphics screen)]
 				     (if (:eraser? @data)
 				       (do
 					 (erase gr))
@@ -193,7 +195,7 @@
 					 (dosync (alter data assoc :last-line nil))))
 				     (let [last-point (:last-point @data)
 					   last-string (:last-string @data)
-					   color (:pen-color @data)
+					   #^Color color (:pen-color @data)
 					   size (:text-size @data)]
 
 				       (if (and
@@ -215,13 +217,13 @@
 				     (.drawImage g screen 0 0 nil)))))
 
 (defn repaint []
-  (.repaint canvas))
+  (.repaint #^JPanel canvas))
 
 (defn update-background [#^Color color]
   (dosync (alter save-data assoc :background (.getRGB color)))
   (set-repaint? true)
-  (.setBackground canvas color)
-  (.requestFocus frame)
+  (.setBackground #^JPanel canvas color)
+  (.requestFocus #^JFrame frame)
   (repaint))
 
   
@@ -267,7 +269,7 @@
   
 (def menu-listener (proxy [ActionListener] []
 		     (actionPerformed [#^ActionEvent e]
-				      (let [source (.toLowerCase (.getText (.getSource e)))]
+				      (let [#^String source (.toLowerCase #^String (.getText #^JMenuItem (.getSource e)))]
 					(condp = source
 					  "export as png" (save-image (save-dialog frame))
 					  "save" (if-let [file (save-dialog frame)]
@@ -285,19 +287,19 @@
 
 
 (defn- create-item
-  ([name #^String key]
+  ([#^String name #^String key]
      (doto (JMenuItem. name)
-       (.setAccelerator (KeyStroke/getKeyStroke key))
-       (.addActionListener menu-listener)))
+       (.setAccelerator #^KeyStroke (KeyStroke/getKeyStroke key))
+       (.addActionListener #^ActionListener menu-listener)))
   ([name]
      (create-item name "")))
 
-(def menu-bar (doto (JMenuBar.)
-		(.add (doto (JMenu. "File")
-			(.add (create-item "Save" "ctrl S"))
-			(.add (create-item "New" "ctrl N"))
-			(.add (create-item "Export as PNG" "ctrl E"))
-			(.add (create-item "Load" "ctrl O"))))
+(def menu-bar (doto (#^JMenuBar JMenuBar.)
+		(.add (doto (#^JMenu JMenu. "File")
+			(.add #^JMenuItem (create-item "Save" "ctrl S"))
+			(.add #^JMenuItem (create-item "New" "ctrl N"))
+			(.add #^JMenuItem (create-item "Export as PNG" "ctrl E"))
+			(.add #^JMenuItem (create-item "Load" "ctrl O"))))
 		(.add (doto (JMenu. "Edit")))))
 
 (def mouse-handle
@@ -340,22 +342,22 @@
 		      (= key KeyEvent/VK_ESCAPE) (System/exit 0)
 		      (= key KeyEvent/VK_D) (dosync
 					     (alter data assoc :last-string (dialog "Enter some text"))
-					     (.requestFocus frame)))
+					     (.requestFocus #^JFrame frame)))
 		     (repaint)))
        (keyReleased [#^KeyEvent e])))
 
 (defn scribe-window []
   (set-repaint? true)
-  (doto canvas
+  (doto #^JPanel canvas
     (.setBackground Color/WHITE)
     (.setPreferredSize (new Dimension 800 600))
     (.addMouseMotionListener  mouse-handle)
     (.addMouseListener mouse-handle))
-  (doto frame
+  (doto #^JFrame frame
     (.setJMenuBar menu-bar)
     (.setBackground Color/WHITE)
     (.setSize 800 600)
-    (.add canvas)
+    (.add #^JPanel canvas)
     (.addKeyListener key-handle)
     (.setDefaultCloseOperation JFrame/DISPOSE_ON_CLOSE)
     (.setResizable false)
