@@ -3,7 +3,7 @@
   (:import
    (java.io File)
    (java.awt Frame Dimension Graphics Graphics2D BasicStroke RenderingHints Color Font)
-   (javax.swing JFrame JPanel JColorChooser JFileChooser JOptionPane JMenuBar JMenuItem JMenu UIManager KeyStroke)
+   (javax.swing JFrame JPanel JSeparator JButton JToolBar JColorChooser JFileChooser JOptionPane JMenuBar JMenuItem JMenu UIManager KeyStroke)
    (javax.swing.event MouseInputAdapter)
    (javax.imageio ImageIO)
    (java.awt.event MouseEvent MouseListener KeyListener ActionListener ActionEvent KeyEvent)
@@ -12,10 +12,7 @@
 ;;TODO: ODD BUG -- DRAW-STRING, LINE 47 -- SOMETIMES.
 ;;TODO: REPAINT-POINTS IS MINE FIELD OF BOILER PLATE
 ;;TODO: ADD OPTIONS
-;;TODO: ADD TOOLBAR!
 ;;TODO: SPLIT INTO RELEVANT SEPARATE FILES
-
-(set! *warn-on-reflection* true)
 
 (defstruct Point :x :y)
 (defstruct Line :b :e)
@@ -35,11 +32,14 @@
 		:pen-color Color/BLACK
 		:background-color Color/WHITE}))
 
+
 (def save-data (ref {:background (.getRGB Color/WHITE)
 		     :eraser-points []
 		     :points {};<COLOR> [coords] ;;COLOR IS RGB FORMAT. COORDS IS [[[0 1] [0 2]] [[12 1] [43 1]]... ]
 		     :text []; => [{:color ** :size ** :text **} {:color ** :size ** :text **} ...]
 		     }))
+
+
 (defn draw-string 
   ([#^Graphics2D g {:keys [#^String text #^Integer x #^Integer y color size]}]
      (.setColor g (Color. color))
@@ -89,7 +89,6 @@
 	(when (not-empty r) (recur r)))))
 
   (doseq [map (:text @save-data)]
-    (println map)
     (let [color (:color map)
 	  size (:size map)
 	  text (:text map)
@@ -197,7 +196,7 @@
 					   last-string (:last-string @data)
 					   #^Color color (:pen-color @data)
 					   size (:text-size @data)]
-
+				       
 				       (if (and
 					    (seq last-point)
 					    (seq last-string))
@@ -207,7 +206,7 @@
 							:text last-string
 							:x (last-point :x)
 							:y (last-point :y)})
-
+					   
 					   (draw-string gr {:color (.getRGB color)
 							    :size 12
 							    :text (:last-string @data)
@@ -226,7 +225,6 @@
   (.requestFocus #^JFrame frame)
   (repaint))
 
-  
 (defn reset [] ;;complete reset of options
   (dosync (alter data assoc
 		 :last-point nil
@@ -241,7 +239,7 @@
 		 :pen-color Color/BLACK
 		 :background-color Color/WHITE)
 	  (alter save-data assoc
-		 :background nil		 
+		 :background nil
 		 :points {}
 		 :text []
 		 :eraser-points []))
@@ -254,27 +252,55 @@
   (if-let [file (load-dialog frame)]
     (do
       (try
-       (let [content (read-string (slurp* file))]
-	 (when-not (map? content)
-	   (throw (Exception. "LOL, BOOM")))
-	 (dosync
-	  (ref-set save-data content)
-	  (alter data assoc :background-color (Color. (:background @save-data)))))
-       (update-background (:background-color @data))
-       (repaint-points (.createGraphics screen) @save-data)
-       (repaint)
-       (catch Exception e
-	 (println e)
-	 (message "File is corrupt, or not a Scribe file"))))))
+	(let [content (read-string (slurp* file))]
+	  (when-not (map? content)
+	    (throw (Exception. "LOL, BOOM")))
+	  (dosync
+	   (ref-set save-data content)
+	   (alter data assoc :background-color (Color. (:background @save-data)))))
+	(update-background (:background-color @data))
+	(repaint-points (.createGraphics screen) @save-data)
+	(repaint)
+	(catch Exception e
+	  (println e)
+	  (message "File is corrupt, or not a Scribe file"))))))
+
+(def button-listener (proxy [ActionListener] []
+		       (actionPerformed [#^ActionEvent e]
+					(let [cmd (.getActionCommand e)]
+					  (condp = cmd
+					      "export" (save-image (save-dialog frame))
+					      "save" (if-let [file (save-dialog frame)]
+						       (spit file  (str @save-data)))
+					      "open" (read-file) 
+					      "new" (reset))))))
+					    
+(defn make-button [text action-command tool-tip]
+  (doto (JButton.)
+    (.setActionCommand action-command)
+    (.setToolTipText tool-tip)
+    (.setText text)
+    (.addActionListener button-listener)))
+
+(def toolbar (doto (JToolBar.)
+	       (.setFloatable false)
+	       (.add (make-button "Save" "save" "Save your sketch"))
+	       (.add (make-button "Export" "export" "Export your sketch to PNG image"))
+	       (.add (make-button "Open" "open" "Open an existing sketch"))
+	       (.add (make-button "New" "new" "Discard current sketch and create a new one"))
+	       (.add (JSeparator.))
+	       (.add (make-button "Eraser" "eraser" "Toggle eraser"))
+	       (.add (make-button "Choose Color" "pick-color" "Choose the color, for both pen and brush"))
+	       (.add (make-button "Change Background" "background" "Change the background color"))))  
   
 (def menu-listener (proxy [ActionListener] []
 		     (actionPerformed [#^ActionEvent e]
 				      (let [#^String source (.toLowerCase #^String (.getText #^JMenuItem (.getSource e)))]
-					(condp = source
+					(condp = source  
 					  "export as png" (save-image (save-dialog frame))
 					  "save" (if-let [file (save-dialog frame)]
 						   (spit file  (str @save-data)))
-					  "load" (read-file) 
+					  "open" (read-file) 
 					  "new" (reset))))))
 ;;FORMAT FOR KEYSTROKES:
 ;    <modifiers>* (<typedID> | <pressedReleasedID>)
@@ -299,7 +325,7 @@
 			(.add #^JMenuItem (create-item "Save" "ctrl S"))
 			(.add #^JMenuItem (create-item "New" "ctrl N"))
 			(.add #^JMenuItem (create-item "Export as PNG" "ctrl E"))
-			(.add #^JMenuItem (create-item "Load" "ctrl O"))))
+			(.add #^JMenuItem (create-item "Open" "ctrl O"))))
 		(.add (doto (JMenu. "Edit")))))
 
 (def mouse-handle
@@ -357,6 +383,7 @@
     (.setJMenuBar menu-bar)
     (.setBackground Color/WHITE)
     (.setSize 800 600)
+    (.add toolbar java.awt.BorderLayout/PAGE_START)
     (.add #^JPanel canvas)
     (.addKeyListener key-handle)
     (.setDefaultCloseOperation JFrame/DISPOSE_ON_CLOSE)
