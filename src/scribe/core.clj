@@ -3,16 +3,15 @@
   (:import
    (java.io File)
    (java.awt Frame Dimension Graphics Graphics2D BasicStroke RenderingHints Color Font)
-   (javax.swing JFrame JPanel JSeparator JButton JToolBar JColorChooser JFileChooser JOptionPane JMenuBar JMenuItem JMenu UIManager KeyStroke)
+   (javax.swing JFrame JPanel JSeparator JButton JToggleButton JToolBar JColorChooser JFileChooser JOptionPane JMenuBar JMenuItem JMenu UIManager KeyStroke)
    (javax.swing.event MouseInputAdapter)
    (javax.imageio ImageIO)
    (java.awt.event MouseEvent MouseListener KeyListener ActionListener ActionEvent KeyEvent)
    (java.awt.image BufferedImage)))
 
-;;TODO: ODD BUG -- DRAW-STRING, LINE 47 -- SOMETIMES.
+;;TODO: MULTILINE DIALOG BOX
 ;;TODO: REPAINT-POINTS IS MINE FIELD OF BOILER PLATE
 ;;TODO: ADD OPTIONS
-;;TODO: SPLIT INTO RELEVANT SEPARATE FILES
 
 (defstruct Point :x :y)
 (defstruct Line :b :e)
@@ -272,7 +271,12 @@
 					      "export" (save-image (save-dialog frame))
 					      "save" (if-let [file (save-dialog frame)]
 						       (spit file  (str @save-data)))
-					      "open" (read-file) 
+					      "open" (read-file)
+					      "background" (do
+							     (pick-color :background-color)
+							     (update-background (:background-color @data)))
+					      "pick-color" (pick-color :pen-color)
+					      "eraser" (set-eraser? (not (:eraser? @data)))
 					      "new" (reset))))))
 					    
 (defn make-button [text action-command tool-tip]
@@ -282,6 +286,12 @@
     (.setText text)
     (.addActionListener button-listener)))
 
+(defn make-toggle-button [text action-command tool-tip]
+  (doto (JToggleButton. text false)
+    (.setActionCommand action-command)
+    (.setToolTipText tool-tip)
+    (.addActionListener button-listener)))
+
 (def toolbar (doto (JToolBar.)
 	       (.setFloatable false)
 	       (.add (make-button "Save" "save" "Save your sketch"))
@@ -289,7 +299,7 @@
 	       (.add (make-button "Open" "open" "Open an existing sketch"))
 	       (.add (make-button "New" "new" "Discard current sketch and create a new one"))
 	       (.add (JSeparator.))
-	       (.add (make-button "Eraser" "eraser" "Toggle eraser"))
+	       (.add (make-toggle-button "Eraser" "eraser" "Toggle eraser"))
 	       (.add (make-button "Choose Color" "pick-color" "Choose the color, for both pen and brush"))
 	       (.add (make-button "Change Background" "background" "Change the background color"))))  
   
@@ -300,7 +310,7 @@
 					  "export as png" (save-image (save-dialog frame))
 					  "save" (if-let [file (save-dialog frame)]
 						   (spit file  (str @save-data)))
-					  "open" (read-file) 
+					  "open" (read-file)
 					  "new" (reset))))))
 ;;FORMAT FOR KEYSTROKES:
 ;    <modifiers>* (<typedID> | <pressedReleasedID>)
