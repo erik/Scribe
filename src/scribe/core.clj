@@ -292,16 +292,18 @@
     (.setToolTipText tool-tip)
     (.addActionListener button-listener)))
 
-(def toolbar (doto (JToolBar.)
-	       (.setFloatable false)
-	       (.add (make-button "Save" "save" "Save your sketch"))
-	       (.add (make-button "Export" "export" "Export your sketch to PNG image"))
-	       (.add (make-button "Open" "open" "Open an existing sketch"))
-	       (.add (make-button "New" "new" "Discard current sketch and create a new one"))
-	       (.add (JSeparator.))
-	       (.add (make-toggle-button "Eraser" "eraser" "Toggle eraser"))
-	       (.add (make-button "Choose Color" "pick-color" "Choose the color, for both pen and brush"))
-	       (.add (make-button "Change Background" "background" "Change the background color"))))  
+(def toolbar
+   
+     (doto (JToolBar.)
+       (.setFloatable false)
+       (.add (make-button "Save" "save" "Save your sketch"))
+       (.add (make-button "Export" "export" "Export your sketch to PNG image"))
+       (.add (make-button "Open" "open" "Open an existing sketch"))
+       (.add (make-button "New" "new" "Discard current sketch and create a new one"))
+       (.add (javax.swing.JToolBar$Separator.))
+       (.add (make-toggle-button "Eraser" "eraser" "Toggle eraser"))
+       (.add (make-button "Choose Color" "pick-color" "Choose the color, for both pen and brush"))
+       (.add (make-button "Change Background" "background" "Change the background color"))))
   
 (def menu-listener (proxy [ActionListener] []
 		     (actionPerformed [#^ActionEvent e]
