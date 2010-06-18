@@ -3,7 +3,9 @@
   (:import
    (java.io File)
    (java.awt Frame Dimension Graphics Graphics2D BasicStroke RenderingHints Color Font)
-   (javax.swing JFrame JPanel JSeparator JButton JToggleButton JToolBar JColorChooser JFileChooser JOptionPane JMenuBar JMenuItem JMenu UIManager KeyStroke)
+   (javax.swing JFrame JPanel JSeparator JButton JToggleButton JToolBar JColorChooser
+		JFileChooser JOptionPane JMenuBar JMenuItem JMenu UIManager KeyStroke
+		JTextArea JScrollPane)
    (javax.swing.event MouseInputAdapter)
    (javax.imageio ImageIO)
    (java.awt.event MouseEvent MouseListener KeyListener ActionListener ActionEvent KeyEvent)
@@ -119,8 +121,15 @@
 (defn save-image [#^File save-file]
   (when save-file (ImageIO/write #^BufferedImage screen "png"  save-file)))
 
-(defn dialog [message]
-  (JOptionPane/showInputDialog message))
+(defn multiline-dialog [title message]
+  (let [area (JTextArea. 5 10)
+	pane (JScrollPane. area)]
+    (JOptionPane/showOptionDialog nil (to-array [message pane]) title
+				  JOptionPane/OK_CANCEL_OPTION
+				  JOptionPane/QUESTION_MESSAGE
+				  nil nil nil)
+    (.getText area)))    
+
 
 (defn message [message]
   (JOptionPane/showMessageDialog nil message))
@@ -378,7 +387,7 @@
 		      (= key KeyEvent/VK_W) (set-eraser? false)
 		      (= key KeyEvent/VK_ESCAPE) (System/exit 0)
 		      (= key KeyEvent/VK_D) (dosync
-					     (alter data assoc :last-string (dialog "Enter some text"))
+					     (alter data assoc :last-string (multiline-dialog "Enter some text" "Enter some text!"))
 					     (.requestFocus #^JFrame frame)))
 		     (repaint)))
        (keyReleased [#^KeyEvent e])))
