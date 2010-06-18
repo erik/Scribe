@@ -11,14 +11,12 @@
    (java.awt.event MouseEvent MouseListener KeyListener ActionListener ActionEvent KeyEvent)
    (java.awt.image BufferedImage)))
 
-;;TODO: MULTILINE DIALOG BOX
 ;;TODO: REPAINT-POINTS IS MINE FIELD OF BOILER PLATE
 ;;TODO: ADD OPTIONS
 
 (defstruct Point :x :y)
 (defstruct Line :b :e)
 
-(def save-dir (File. (str (System/getProperty "user.home") "/.scribe" )))
 (def #^BufferedImage screen (BufferedImage. 800 600 BufferedImage/TYPE_INT_RGB))
 
 (def data (ref {:last-point nil
@@ -277,6 +275,9 @@
 		       (actionPerformed [#^ActionEvent e]
 					(let [cmd (.getActionCommand e)]
 					  (condp = cmd
+					      "text" (dosync
+						      (alter data assoc :last-string (multiline-dialog "Enter some text" "Enter some text!"))
+						      (.requestFocus #^JFrame frame))
 					      "export" (save-image (save-dialog frame))
 					      "save" (if-let [file (save-dialog frame)]
 						       (spit file  (str @save-data)))
@@ -311,12 +312,14 @@
        (.add (javax.swing.JToolBar$Separator.))
        (.add (make-toggle-button "Eraser" "eraser" "Toggle eraser"))
        (.add (make-button "Choose Color" "pick-color" "Choose the color, for both pen and brush"))
-       (.add (make-button "Change Background" "background" "Change the background color"))))
+       (.add (make-button "Change Background" "background" "Change the background color"))
+       (.add (make-button "Add Text" "text" "Inset a block of text at the last clicked position"))))
   
 (def menu-listener (proxy [ActionListener] []
 		     (actionPerformed [#^ActionEvent e]
 				      (let [#^String source (.toLowerCase #^String (.getText #^JMenuItem (.getSource e)))]
-					(condp = source  
+					(condp = source
+					  "quit" (System/exit 0)
 					  "export as png" (save-image (save-dialog frame))
 					  "save" (if-let [file (save-dialog frame)]
 						   (spit file  (str @save-data)))
@@ -345,8 +348,8 @@
 			(.add #^JMenuItem (create-item "Save" "ctrl S"))
 			(.add #^JMenuItem (create-item "New" "ctrl N"))
 			(.add #^JMenuItem (create-item "Export as PNG" "ctrl E"))
-			(.add #^JMenuItem (create-item "Open" "ctrl O"))))
-		(.add (doto (JMenu. "Edit")))))
+			(.add #^JMenuItem (create-item "Open" "ctrl O"))
+			(.add #^JMenuItem (create-item "Quit" "ctrl Q"))))))
 
 (def mouse-handle
      (proxy [MouseInputAdapter] []
