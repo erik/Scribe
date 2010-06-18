@@ -292,8 +292,7 @@
     (.setToolTipText tool-tip)
     (.addActionListener button-listener)))
 
-(def toolbar
-   
+(def toolbar   
      (doto (JToolBar.)
        (.setFloatable false)
        (.add (make-button "Save" "save" "Save your sketch"))
@@ -386,6 +385,7 @@
 
 (defn scribe-window []
   (set-repaint? true)
+  (.addKeyListener toolbar key-handle)
   (doto #^JPanel canvas
     (.setBackground Color/WHITE)
     (.setPreferredSize (new Dimension 800 600))
